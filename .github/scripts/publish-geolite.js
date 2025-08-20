@@ -1,4 +1,4 @@
-// 自动下载 GeoLite2 数据库并发布到 npm
+// 自动下载 GeoLite2 数据库并发布到 npm 和 Cloudflare R2
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -33,10 +33,22 @@ const TODAY = `${year}.${month}.${day}-${hour.toString().padStart(2, '0')}${minu
 const ACCOUNT_ID = process.env.MAXMIND_ACCOUNT_ID;
 const LICENSE_KEY = process.env.MAXMIND_LICENSE_KEY;
 const NPM_TOKEN = process.env.NPM_TOKEN;
+const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
+const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 
 if (!ACCOUNT_ID || !LICENSE_KEY || !NPM_TOKEN) {
   console.error('Missing required environment variables.');
   process.exit(1);
+}
+
+// Cloudflare R2 配置
+const R2_BUCKET = 'geo-mmd';
+const hasR2Config = CLOUDFLARE_ACCOUNT_ID && CLOUDFLARE_API_TOKEN;
+
+if (hasR2Config) {
+  console.log('✅ Cloudflare R2 credentials found');
+} else {
+  console.log('⚠️  Cloudflare R2 credentials not found, skipping R2 upload');
 }
 
 async function downloadAndExtract(edition) {
@@ -134,6 +146,63 @@ function publishNpm(pkgDir) {
   execSync('npm publish --access public', { cwd: pkgDir, stdio: 'inherit' });
 }
 
+async function uploadToR2(mmdbPath, edition) {
+  if (!hasR2Config) {
+    console.log('⚠️  Skipping R2 upload (credentials not configured)');
+    return;
+  }
+
+  try {
+    const fileName = path.basename(mmdbPath);
+    const r2Key = `${edition}/${TODAY}/${fileName}`;
+    const latestKey = `${edition}/latest/${fileName}`;
+    
+    const fileBuffer = fs.readFileSync(mmdbPath);
+    const url = `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET}/objects/${r2Key}`;
+    const latestUrl = `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${R2_BUCKET}/objects/${latestKey}`;
+    
+    // 上传带版本的文件
+    console.log(`Uploading to R2: ${r2Key}`);
+    const response1 = await axios.put(url, fileBuffer, {
+      headers: {
+        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/octet-stream',
+      },
+      timeout: 300000, // 5分钟超时
+    });
+    
+    if (response1.status === 200) {
+      console.log(`✅ Successfully uploaded ${r2Key} to R2`);
+    } else {
+      throw new Error(`Upload failed with status ${response1.status}`);
+    }
+    
+    // 上传到 latest 目录（覆盖旧版本）
+    console.log(`Uploading to R2: ${latestKey}`);
+    const response2 = await axios.put(latestUrl, fileBuffer, {
+      headers: {
+        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`,
+        'Content-Type': 'application/octet-stream',
+      },
+      timeout: 300000, // 5分钟超时
+    });
+    
+    if (response2.status === 200) {
+      console.log(`✅ Successfully uploaded ${latestKey} to R2`);
+    } else {
+      throw new Error(`Upload failed with status ${response2.status}`);
+    }
+    
+  } catch (error) {
+    console.error(`❌ Failed to upload ${edition} to R2:`, error.message);
+    if (error.response) {
+      console.error(`Status: ${error.response.status}`);
+      console.error(`Response:`, error.response.data);
+    }
+    // 不抛出错误，让进程继续执行其他数据库的处理
+  }
+}
+
 (async () => {
   console.log(`Starting GeoLite2 download and publish process at ${new Date().toISOString()}`);
   console.log(`Version: ${TODAY}`);
@@ -142,9 +211,15 @@ function publishNpm(pkgDir) {
     try {
       console.log(`\n=== Processing ${edition} ===`);
       const mmdbPath = await downloadAndExtract(edition);
+      
+      // 发布到 npm
       const pkgDir = createNpmPackage(edition, mmdbPath);
       publishNpm(pkgDir);
-      console.log(`✅ Successfully published ${NPM_PACKAGE_NAMES[edition]}`);
+      console.log(`✅ Successfully published ${NPM_PACKAGE_NAMES[edition]} to npm`);
+      
+      // 上传到 Cloudflare R2
+      await uploadToR2(mmdbPath, edition);
+      
     } catch (error) {
       console.error(`❌ Failed to process ${edition}:`, error.message);
       // 继续处理其他数据库，不要因为一个失败就停止
