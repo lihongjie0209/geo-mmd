@@ -5,7 +5,7 @@
 ## 自动化流程
 - 使用 GitHub Actions，每周日自动触发，也支持手动触发。
 - 下载 GeoLite2-ASN、GeoLite2-City、GeoLite2-Country 数据库。
-- 以 @geo-mmd/GeoLite2-ASN、@geo-mmd/GeoLite2-City、@geo-mmd/GeoLite2-Country 形式发布到 npm，版本号为日期（如 2025.08.20）。
+- 以 @geo-mmd/geolite2-asn、@geo-mmd/geolite2-city、@geo-mmd/geolite2-country 形式发布到 npm，版本号为日期（如 2025.08.20）。
 - 自动在 GitHub 发布 Release。
 
 ## 使用方法

@@ -11,6 +11,13 @@ const EDITIONS = [
   'GeoLite2-Country',
 ];
 const NPM_ORG = '@geo-mmd';
+
+// npm 包名映射 (npm 包名必须是小写)
+const NPM_PACKAGE_NAMES = {
+  'GeoLite2-ASN': 'geolite2-asn',
+  'GeoLite2-City': 'geolite2-city',
+  'GeoLite2-Country': 'geolite2-country',
+};
 const TMP_DIR = path.join(__dirname, '../../geolite2_tmp');
 const TODAY = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
 
@@ -60,15 +67,16 @@ function createNpmPackage(edition, mmdbPath) {
   fs.rmSync(pkgDir, { recursive: true, force: true });
   fs.mkdirSync(pkgDir, { recursive: true });
   // 写入 package.json
+  const packageName = NPM_PACKAGE_NAMES[edition];
   const pkgJson = {
-    name: `${NPM_ORG}/${edition}`,
+    name: `${NPM_ORG}/${packageName}`,
     version: TODAY,
     description: `MaxMind ${edition} database, updated weekly`,
     main: path.basename(mmdbPath),
     files: [path.basename(mmdbPath)],
-    keywords: ['maxmind', 'geolite2', 'geoip', edition.toLowerCase()],
+    keywords: ['maxmind', 'geolite2', 'geoip', packageName],
     license: 'CC BY-SA 4.0',
-    repository: '',
+    repository: 'https://github.com/lihongjie0209/geo-mmd',
   };
   fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify(pkgJson, null, 2));
   // 拷贝 mmdb
