@@ -42,20 +42,42 @@ async function downloadAndExtract(edition) {
   const writer = fs.createWriteStream(outPath);
   const auth = Buffer.from(`${ACCOUNT_ID}:${LICENSE_KEY}`).toString('base64');
   
-  const response = await axios({ 
-    url, 
-    method: 'GET', 
-    responseType: 'stream',
-    headers: {
-      'Authorization': `Basic ${auth}`
+  console.log(`Downloading ${edition} from ${url}...`);
+  
+  let response;
+  try {
+    response = await axios({ 
+      url, 
+      method: 'GET', 
+      responseType: 'stream',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'User-Agent': 'geo-mmd-downloader/1.0'
+      },
+      timeout: 60000, // 60秒超时
+      maxRedirects: 5
+    });
+    
+    console.log(`Response status: ${response.status}`);
+    console.log(`Content-Length: ${response.headers['content-length']}`);
+    
+  } catch (error) {
+    console.error(`Download failed for ${edition}:`, error.message);
+    if (error.response) {
+      console.error(`Status: ${error.response.status}`);
+      console.error(`Headers:`, error.response.headers);
+      console.error(`Data:`, error.response.data);
     }
-  });
+    throw new Error(`Failed to download ${edition}: ${error.message}`);
+  }
   
   await new Promise((resolve, reject) => {
     response.data.pipe(writer);
     writer.on('finish', resolve);
     writer.on('error', reject);
   });
+  
+  console.log(`Downloaded ${edition} successfully`);
   
   // 解压
   fs.mkdirSync(extractPath, { recursive: true });
@@ -106,10 +128,25 @@ function publishNpm(pkgDir) {
 }
 
 (async () => {
+  console.log(`Starting GeoLite2 download and publish process at ${new Date().toISOString()}`);
+  console.log(`Version: ${TODAY}`);
+  
   for (const edition of EDITIONS) {
-    console.log(`Processing ${edition}...`);
-    const mmdbPath = await downloadAndExtract(edition);
-    const pkgDir = createNpmPackage(edition, mmdbPath);
-    publishNpm(pkgDir);
+    try {
+      console.log(`\n=== Processing ${edition} ===`);
+      const mmdbPath = await downloadAndExtract(edition);
+      const pkgDir = createNpmPackage(edition, mmdbPath);
+      publishNpm(pkgDir);
+      console.log(`✅ Successfully published ${NPM_PACKAGE_NAMES[edition]}`);
+    } catch (error) {
+      console.error(`❌ Failed to process ${edition}:`, error.message);
+      // 继续处理其他数据库，不要因为一个失败就停止
+      continue;
+    }
   }
-})();
+  
+  console.log(`\n🎉 Process completed at ${new Date().toISOString()}`);
+})().catch(error => {
+  console.error('❌ Fatal error:', error);
+  process.exit(1);
+});
