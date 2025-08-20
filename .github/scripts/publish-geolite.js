@@ -31,17 +31,30 @@ if (!ACCOUNT_ID || !LICENSE_KEY || !NPM_TOKEN) {
 }
 
 async function downloadAndExtract(edition) {
-  const url = `https://download.maxmind.com/app/geoip_download?edition_id=${edition}&license_key=${LICENSE_KEY}&suffix=tar.gz`;
+  // 使用新的下载 URL 格式和基本认证
+  const url = `https://download.maxmind.com/geoip/databases/${edition}/download?suffix=tar.gz`;
   const outPath = path.join(TMP_DIR, `${edition}.tar.gz`);
   const extractPath = path.join(TMP_DIR, edition);
   fs.mkdirSync(TMP_DIR, { recursive: true });
+  
   const writer = fs.createWriteStream(outPath);
-  const response = await axios({ url, method: 'GET', responseType: 'stream' });
+  const auth = Buffer.from(`${ACCOUNT_ID}:${LICENSE_KEY}`).toString('base64');
+  
+  const response = await axios({ 
+    url, 
+    method: 'GET', 
+    responseType: 'stream',
+    headers: {
+      'Authorization': `Basic ${auth}`
+    }
+  });
+  
   await new Promise((resolve, reject) => {
     response.data.pipe(writer);
     writer.on('finish', resolve);
     writer.on('error', reject);
   });
+  
   // 解压
   fs.mkdirSync(extractPath, { recursive: true });
   await tar.x({ file: outPath, cwd: extractPath });
