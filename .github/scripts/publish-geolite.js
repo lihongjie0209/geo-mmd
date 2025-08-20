@@ -19,7 +19,9 @@ const NPM_PACKAGE_NAMES = {
   'GeoLite2-Country': 'geolite2-country',
 };
 const TMP_DIR = path.join(__dirname, '../../geolite2_tmp');
-const TODAY = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+// 使用更精确的版本号，包含时分秒
+const now = new Date();
+const TODAY = `${now.getFullYear()}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getDate().toString().padStart(2, '0')}.${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
 
 const ACCOUNT_ID = process.env.MAXMIND_ACCOUNT_ID;
 const LICENSE_KEY = process.env.MAXMIND_LICENSE_KEY;
